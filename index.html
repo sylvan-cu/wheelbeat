@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="WheelBeat">
+<title>WheelBeat</title>
+<style>
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:max(14px,env(safe-area-inset-top)) 14px 24px;transition:background .15s;-webkit-user-select:none;user-select:none}
+body.rec{background:#3a0d0d}body.count{background:#3a2c0d}body.teach{background:#0d2a3a}body.cap{background:#2a0d3a}
+button{font:600 17px -apple-system,sans-serif;padding:15px 6px;border-radius:12px;border:0;background:#2b2b2b;color:#fff}
+button:active{background:#444}
+button.on{background:#2a6}
+#go{width:100%;font-size:26px;padding:22px;background:#2a6}
+#inst{font:800 50px -apple-system,sans-serif;text-align:center;margin:10px 0 0;letter-spacing:1px;line-height:1.05}
+#sub{font:700 20px -apple-system,sans-serif;text-align:center;min-height:1.3em;opacity:.9}
+#status{font-size:15px;text-align:center;white-space:pre-line;opacity:.8;margin:6px 0 10px}
+#grid{width:100%;height:170px;display:block;background:#0b0b0b;border-radius:10px}
+#hitrow{display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0}
+#hit{width:26px;height:26px;border-radius:50%;background:#333}
+#hit.on{background:#4f8}
+#hitlbl{font:600 15px ui-monospace,monospace;min-width:6em;opacity:.8}
+.row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+.row3{grid-template-columns:repeat(3,1fr)}
+label{display:block;margin:12px 0 4px;font-size:15px}
+input[type=range]{width:100%}
+#heard{font-size:15px;opacity:.7;min-height:1.4em;text-align:center}
+#log{font:12px ui-monospace,monospace;opacity:.55;white-space:pre-line;max-height:28vh;overflow:auto;margin-top:12px}
+details{margin-top:8px}summary{font-size:15px;opacity:.85;padding:6px 0}
+.help{font-size:13px;opacity:.7;line-height:1.5}
+.help b{opacity:1;color:#fff}
+</style></head><body>
+<button id="go">Start</button>
+<div id="inst">HATS</div>
+<div id="sub"></div>
+<div id="status"></div>
+<canvas id="grid"></canvas>
+<div id="hitrow"><div id="hit"></div><div id="hitlbl"></div></div>
+<div id="heard"></div>
+<div class="row">
+ <button id="bRec">Rec</button><button id="bPlay">Play</button><button id="bInst">Inst</button><button id="bUndo">Undo</button>
+</div>
+<div class="row">
+ <button id="bDub">Overdub</button><button id="bKeep">Keep</button><button id="bKit">Full kit</button><button id="bTeach">Teach</button>
+</div>
+<details><summary>Settings</summary>
+ <label>Sensitivity (hit threshold over noise): <span id="sensv"></span></label>
+ <input id="sens" type="range" min="1.5" max="10" step="0.1">
+ <label>Latency offset: <span id="latv"></span> ms</label>
+ <input id="lat" type="range" min="0" max="400" step="5">
+ <label>Swing: <span id="swv"></span>%</label>
+ <input id="sw" type="range" min="0" max="60" step="5">
+ <div class="row">
+  <button id="bCal">Calib</button><button id="bSamp">Sample</button><button id="bExp">Export</button><button id="bGate">Gate</button>
+ </div>
+ <div class="row">
+  <button id="bClr">Clear inst</button><button id="bClrAll">Clear all</button><button id="bMon">Monitor</button><button id="bQ">Quant</button>
+ </div>
+</details>
+<details><summary>Voice commands</summary>
+<div class="help">
+<b>Instruments:</b> kick, snare, hats, open hat, clap, rim, tom, cowbell, vocal<br>
+<b>Loop:</b> record · overdub (records every pass until "done") · keep (saves the last pass you just played, no count-in) · play · stop · done<br>
+<b>Edit:</b> undo · clear · clear all · mute kick / unmute kick / mute last / unmute all · solo snare / solo off<br>
+<b>Full kit:</b> teach kick (hit that spot 8 times), teach snare, teach hats… then "full kit on" and record: each hit is sorted by where you hit<br>
+<b>Vocal chops:</b> sample (sing after the beep, 2 seconds) · then "vocal" + record; each hit plays the next chop · chops off = whole sample<br>
+<b>Setup:</b> tempo 92 · tap tempo · bars 8 · swing on/off · quantize on/off · click on/off · monitor on/off · gate on/off · louder / quieter · calibrate · status
+</div>
+</details>
+<div id="log"></div>
+<script>
+'use strict';
+const INST=['kick','snare','hats','open','clap','rim','tom','cow','vox'];
+const LBL={kick:'kick',snare:'snare',hats:'hats',open:'open hat',clap:'clap',rim:'rim',tom:'tom',cow:'cowbell',vox:'vocal'};
+const COL={kick:'#f55',snare:'#fb3',hats:'#4df',open:'#39f',clap:'#f7c',rim:'#ccc',tom:'#f83',cow:'#bf5',vox:'#b8f'};
+const BAR_CHOICES=[1,2,4,8,16];
+const DEF={bpm:90,bars:4,inst:'hats',layers:[],mute:{},quant:true,click:true,monitor:false,gate:false,lat:90,sens:3.5,swing:0,vol:0.9,kit:false,zones:{},chop:true,nextId:1};
+const S=JSON.parse(JSON.stringify(DEF));
+try{
+  const old=JSON.parse(localStorage.getItem('wheelbeat')||'{}');
+  if(old.tracks&&!old.layers){ // migrate v0
+    old.layers=[];for(const k in old.tracks)if(old.tracks[k].length)old.layers.push({id:old.layers.length+1,name:k,hits:old.tracks[k].map(p=>({p,v:0.8,i:k}))});
+    old.nextId=old.layers.length+1;delete old.tracks;
+  }
+  Object.assign(S,old);
+}catch(_){}
+const save=()=>{try{localStorage.setItem('wheelbeat',JSON.stringify(S))}catch(_){}};
+
+let ctx,master,setDet=()=>{},recog,wakeLock,alive=false;
+let playing=false,t0=0,schedUntil=0;
+let rec=null,tap=null,cal=null,teach=null,capturing=false;
+let hist=[],selfT=[],monT=[],recent=[];
+let lastSaid='',lastSaidAt=0,batch=null,vox=null,voxRR=0;
+
+const $=id=>document.getElementById(id);
+const log=m=>{$('log').textContent=m+'\n'+$('log').textContent.slice(0,3000)};
+const spb=()=>60/S.bpm, LB=()=>S.bars*4, LL=()=>LB()*spb();
+const mod=(a,n)=>((a%n)+n)%n;
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+/* ---------- speech out (batched inside one command so confirmations don't cut each other off) ---------- */
+function say(t){
+  if(batch){batch.push(t);return}
+  log('> '+t);lastSaid=t.toLowerCase();lastSaidAt=performance.now();
+  try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=1.15;speechSynthesis.speak(u)}catch(_){}
+}
+const waitSpeech=()=>new Promise(r=>{const st=performance.now();const f=()=>(!speechSynthesis.speaking||performance.now()-st>4000)?r():setTimeout(f,60);setTimeout(f,150)});
+
+/* ---------- drum synth: (context, output, time, sliceIndex) so it also renders offline ---------- */
+const NB=new WeakMap();
+function nbuf(c){let b=NB.get(c);if(!b){b=c.createBuffer(1,c.sampleRate,c.sampleRate);const d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;NB.set(c,b)}return b}
+function env(g,t,peak,dec){g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+0.002);g.gain.exponentialRampToValueAtTime(0.0001,t+dec)}
+function osc(c,o,t,f0,f1,sweep,peak,dec,type){const s=c.createOscillator(),g=c.createGain();s.type=type||'sine';s.frequency.setValueAtTime(f0,t);if(f1)s.frequency.exponentialRampToValueAtTime(f1,t+sweep);env(g,t,peak,dec);s.connect(g).connect(o);s.start(t);s.stop(t+dec+0.02)}
+function nz(c,o,t,type,freq,q,peak,dec){const s=c.createBufferSource();s.buffer=nbuf(c);const f=c.createBiquadFilter();f.type=type;f.frequency.value=freq;if(q)f.Q.value=q;const g=c.createGain();env(g,t,peak,dec);s.connect(f).connect(g).connect(o);s.start(t,Math.random()*0.5);s.stop(t+dec+0.02)}
+const DRUM={
+  kick:(c,o,t)=>{osc(c,o,t,160,42,0.11,1,0.45);osc(c,o,t,1200,200,0.01,0.25,0.015,'triangle')},
+  snare:(c,o,t)=>{nz(c,o,t,'highpass',1500,0,0.6,0.18);nz(c,o,t,'bandpass',3500,0.8,0.3,0.12);osc(c,o,t,220,170,0.05,0.5,0.1,'triangle')},
+  hats:(c,o,t)=>nz(c,o,t,'highpass',7500,0,0.35,0.045),
+  open:(c,o,t)=>{nz(c,o,t,'highpass',7000,0,0.3,0.38);nz(c,o,t,'bandpass',10000,1,0.15,0.3)},
+  clap:(c,o,t)=>{for(const d of [0,0.011,0.022])nz(c,o,t+d,'bandpass',1300,1.2,0.55,0.025);nz(c,o,t+0.03,'bandpass',1200,0.9,0.4,0.18)},
+  rim:(c,o,t)=>{osc(c,o,t,1750,0,0,0.35,0.035,'triangle');nz(c,o,t,'bandpass',2600,3,0.4,0.025)},
+  tom:(c,o,t)=>{osc(c,o,t,210,105,0.25,0.9,0.4);nz(c,o,t,'lowpass',900,0,0.15,0.05)},
+  cow:(c,o,t)=>{osc(c,o,t,545,0,0,0.13,0.28,'square');osc(c,o,t,815,0,0,0.13,0.28,'square')},
+  vox:(c,o,t,s)=>{
+    if(!vox)return;
+    const src=c.createBufferSource();src.buffer=vox.buf;const g=c.createGain();
+    let a=0,b=vox.buf.duration;if(s!=null&&s>=0&&vox.slices.length){[a,b]=vox.slices[s%vox.slices.length]}
+    const dur=Math.max(0.03,b-a);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(1,t+0.004);g.gain.setValueAtTime(1,t+dur-0.012);g.gain.linearRampToValueAtTime(0,t+dur);
+    src.connect(g).connect(o);src.start(t,a,dur+0.01);
+  },
+  click:(c,o,t,acc)=>osc(c,o,t,acc?1500:1000,0,0,acc?0.35:0.18,0.03),
+  beep:(c,o,t)=>osc(c,o,t,2000,0,0,0.3,0.12)
+};
+function playHit(c,o,t,i,v,s){
+  if(!DRUM[i])return;
+  const g=c.createGain();g.gain.value=v==null?0.85:v;g.connect(o);
+  DRUM[i](c,g,t,s);
+}
+
+/* ---------- onset detector + zone features + raw capture: shared by AudioWorklet and ScriptProcessor fallback ----------
+   input channels: 0 = detect band (100-400 Hz), 1 = low, 2 = mid, 3 = high, 4 = raw mic */
+function detCore(sr){
+  let env=0,floor=0.002,hold=0,th=3.5,minAbs=0.008,pend=null,cap=null,ref=0;
+  const rel=Math.exp(-1/(0.015*sr)),fl=1/(0.5*sr),holdN=Math.round(0.06*sr);
+  const w1=Math.round(0.02*sr),w2=Math.round(0.05*sr),pk=Math.round(0.01*sr);
+  return{
+    set(o){if(o.th)th=o.th;if(o.minAbs)minAbs=o.minAbs;if(o.cap)cap={buf:new Float32Array(o.cap),i:0}},
+    run(chs,tStart,emit){
+      const c0=chs[0],n=c0.length;
+      for(let i=0;i<n;i++){
+        if(cap&&chs[4]){cap.buf[cap.i++]=chs[4][i];if(cap.i>=cap.buf.length){emit({cap:cap.buf});cap=null}}
+        const x=Math.abs(c0[i]);
+        env=x>env?x:env*rel;
+        if(pend){
+          const k=pend.k++,o=k<w1?0:3;
+          for(let b=0;b<3;b++){const ch=chs[b+1];if(ch){const y=ch[i];pend.e[o+b]+=y*y}}
+          if(k<pk){const r=env/pend.fl;if(r>pend.r)pend.r=r}
+          if(pend.k>=w2){emit({t:pend.t,r:pend.r,f:pend.e});pend=null}
+        }
+        ref*=rel;
+        if(hold>0){hold--;if(hold===0)ref=env;continue}
+        floor+=(env-floor)*fl;if(floor<1e-4)floor=1e-4;
+        // ref follows the last hit's decay, so only a fresh jump retriggers
+        if(env>floor*th&&env>minAbs&&env>ref*1.6){
+          if(!pend)pend={t:tStart+i/sr,r:env/floor,fl:floor,k:0,e:[0,0,0,0,0,0]};
+          hold=holdN;
+        }
+      }
+    }
+  };
+}
+const WSRC=detCore.toString()+`
+class DetP extends AudioWorkletProcessor{
+  constructor(){super();this.d=detCore(sampleRate);this.port.onmessage=e=>this.d.set(e.data)}
+  process(inp){const chs=inp[0];if(chs&&chs[0])this.d.run(chs,currentTime,m=>this.port.postMessage(m));return true}
+}
+registerProcessor('det',DetP);`;
+
+/* ---------- startup ---------- */
+async function start(){
+  if(alive)return;
+  try{if(navigator.audioSession)navigator.audioSession.type='play-and-record'}catch(_){}
+  ctx=new(window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+  await ctx.resume();
+  ctx.onstatechange=()=>{if(ctx.state!=='running')ctx.resume().catch(()=>{})};
+  master=ctx.createGain();master.gain.value=S.vol;
+  const comp=ctx.createDynamicsCompressor();master.connect(comp).connect(ctx.destination);
+  loadVox();
+  let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:false,autoGainControl:false}})}
+  catch(e){log('Mic refused: '+e.message);say('Microphone blocked');return}
+  const src=ctx.createMediaStreamSource(stream);
+  const bq=(type,f,q)=>{const b=ctx.createBiquadFilter();b.type=type;b.frequency.value=f;if(q)b.Q.value=q;return b};
+  const merge=ctx.createChannelMerger(5);
+  // ch0: detect band, cuts road rumble and our own click/hat bleed
+  src.connect(bq('highpass',100)).connect(bq('lowpass',400)).connect(bq('lowpass',400)).connect(merge,0,0);
+  // ch1-3: band energies for telling hit zones apart
+  src.connect(bq('bandpass',160,0.8)).connect(merge,0,1);
+  src.connect(bq('bandpass',700,0.8)).connect(merge,0,2);
+  src.connect(bq('highpass',2500)).connect(merge,0,3);
+  src.connect(merge,0,4);
+  const sink=ctx.createGain();sink.gain.value=0;sink.connect(ctx.destination);
+  try{
+    const url=URL.createObjectURL(new Blob([WSRC],{type:'application/javascript'}));
+    await ctx.audioWorklet.addModule(url);
+    const n=new AudioWorkletNode(ctx,'det',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1],channelCount:5,channelCountMode:'explicit',channelInterpretation:'discrete'});
+    n.port.onmessage=e=>onMsg(e.data);
+    setDet=o=>n.port.postMessage(o);
+    merge.connect(n).connect(sink);
+    window._det=n;
+  }catch(err){
+    log('Worklet failed ('+err.message+'), using fallback');
+    const d=detCore(ctx.sampleRate),sp=ctx.createScriptProcessor(1024,5,1);
+    sp.onaudioprocess=e=>{const ib=e.inputBuffer,chs=[];for(let c=0;c<ib.numberOfChannels;c++)chs.push(ib.getChannelData(c));d.run(chs,ctx.currentTime-1024/ctx.sampleRate,onMsg)};
+    setDet=o=>d.set(o);
+    merge.connect(sp).connect(sink);
+    window._det=sp;
+  }
+  setDet({th:S.sens});
+  alive=true;
+  $('go').textContent='Running · tap to re-arm voice';$('go').style.background='#333';$('go').onclick=()=>{try{recog&&recog.start()}catch(_){}ctx.resume()};
+  startRecog();keepAwake();
+  setInterval(tick,25);
+  say(S.layers.length?`Ready. ${S.layers.length} layers loaded. Say play.`:'Ready. Say hats, then record.');
+}
+
+async function keepAwake(){
+  try{if('wakeLock' in navigator)wakeLock=await navigator.wakeLock.request('screen')}catch(_){}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&alive){keepAwake();ctx.resume().catch(()=>{})}});
+
+/* ---------- speech in ---------- */
+function startRecog(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){log('No speech recognition here; use the buttons');return}
+  recog=new SR();recog.continuous=true;recog.interimResults=false;recog.lang='en-US';
+  recog.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)command(e.results[i][0].transcript)};
+  recog.onerror=e=>{if(e.error!=='no-speech'&&e.error!=='aborted')log('speech: '+e.error)};
+  recog.onend=()=>{if(alive)setTimeout(()=>{try{recog.start()}catch(_){}},250)};
+  try{recog.start()}catch(e){log('speech start failed: '+e.message)}
+}
+
+const NUMW={one:1,two:2,to:2,too:2,three:3,four:4,for:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,sixteen:16};
+const INSTW={kick:'kick',kicks:'kick',snare:'snare',snares:'snare',hats:'hats',hat:'hats',open:'open',clap:'clap',claps:'clap',clapping:'clap',rim:'rim',rims:'rim',tom:'tom',toms:'tom',cow:'cow',vox:'vox'};
+const TAKES_INST=new Set(['mute','unmute','solo','teach']);
+function command(raw){
+  const said=raw.trim().toLowerCase();
+  if(performance.now()-lastSaidAt<4000&&lastSaid.includes(said))return; // it heard its own voice
+  $('heard').textContent='“'+raw.trim()+'”';log('< '+raw.trim());
+  let s=' '+said.replace(/[^a-z0-9 ]/g,' ')+' ';
+  s=s.replace(/\bopen (hi |high )?hi ?hats?\b/g,'open').replace(/\bopen (hi|high) ?hats?\b/g,'open')
+     .replace(/\b(hi|high)\s?hats?\b/g,'hats').replace(/\bhihats?\b/g,'hats').replace(/\bbass drum\b/g,'kick')
+     .replace(/\bcow ?bells?\b/g,'cow').replace(/\b(rim ?shots?|side ?stick)\b/g,'rim').replace(/\btom ?toms?\b/g,'tom')
+     .replace(/\bchops? (on|off)\b/g,'chopmode $1').replace(/\b(full kit|kit mode|full kit mode)\b/g,'kitmode')
+     .replace(/\b(vocals?|vox|voice|chops?|vocal chops?)\b/g,'vox').replace(/\bkeep (that|it|this)\b/g,'keep')
+     .replace(/\bloop record\b/g,'overdub').replace(/\bover dub\b/g,'overdub').replace(/\bplay back\b/g,'play')
+     .replace(/\bsolo off\b/g,'unmute all').replace(/\s+/g,' ');
+  const w=s.trim().split(' ').map(x=>NUMW[x]!=null?String(NUMW[x]):x);
+  const num=i=>/^\d+$/.test(w[i]||'')?parseInt(w[i]):null;
+  const onoff=i=>w[i]==='on'?true:w[i]==='off'?false:null;
+  batch=[];
+  try{
+    // pass 1: a bare instrument word selects it first, so "record snare" records snare
+    for(let i=0;i<w.length;i++)if(INSTW[w[i]]&&!TAKES_INST.has(w[i-1])&&!(w[i]==='open'&&w[i-1]==='un'))setInst(INSTW[w[i]]);
+    // pass 2: actions
+    for(let i=0;i<w.length;i++){
+      const x=w[i],nx=w[i+1];
+      if(x==='record'||x==='rec')record(false);
+      else if(x==='overdub'||x==='layer')record(true);
+      else if(x==='keep'||x==='capture'||x==='save')keep();
+      else if(x==='play'||x==='start'||x==='go')play();
+      else if(x==='stop'||x==='pause')stop();
+      else if(x==='done'||x==='finish'||x==='enough')done();
+      else if(x==='undo'||x==='delete')undo();
+      else if(x==='clear'){if(nx==='all'||nx==='everything'){clearAll();i++}else clearInst()}
+      else if(x==='tap'&&nx==='tempo'){tapTempo();i++}
+      else if(x==='tempo'||x==='bpm'){const n=num(i+1)??num(i-1);if(n){setTempo(n);i++}}
+      else if(x==='bars'||x==='bar'){const n=num(i+1)??num(i-1);if(n){setBars(n);i++}}
+      else if(x==='mute'){if(nx==='last'){muteLast(true);i++}else if(nx==='all'){for(const k of INST)S.mute[k]=true;save();say('All muted');i++}else if(INSTW[nx]){setMute(INSTW[nx],true);i++}else setMute(S.inst,true)}
+      else if(x==='unmute'||(x==='un'&&nx==='mute')){if(x==='un')i++;const y=w[i+1];if(y==='last'){muteLast(false);i++}else if(y==='all'){unmuteAll();i++}else if(INSTW[y]){setMute(INSTW[y],false);i++}else setMute(S.inst,false)}
+      else if(x==='solo'){const k=INSTW[nx]||S.inst;if(INSTW[nx])i++;for(const j of INST)S.mute[j]=j!==k;save();say('Solo '+LBL[k])}
+      else if(x==='teach'||x==='train'||x==='learn'){const k=INSTW[nx]||S.inst;if(INSTW[nx])i++;startTeach(k)}
+      else if(x==='kitmode'){const v=onoff(i+1);setKit(v??!S.kit);if(v!=null)i++}
+      else if(x==='sample'||x==='sing')sample();
+      else if(x==='chopmode'){const v=onoff(i+1);S.chop=v??!S.chop;save();say('Chops '+(S.chop?'on':'off'));if(v!=null)i++}
+      else if(x==='quantize'||x==='quantise'){const v=onoff(i+1);S.quant=v??!S.quant;say('Quantize '+(S.quant?'on':'off'));save()}
+      else if(x==='swing'){const n=num(i+1),v=onoff(i+1);setSwing(n!=null?n:v===false?0:v===true?30:(S.swing?0:30))}
+      else if(x==='click'||x==='metronome'){const v=onoff(i+1);S.click=v??!S.click;say('Click '+(S.click?'on':'off'));save()}
+      else if(x==='monitor'){const v=onoff(i+1);S.monitor=v??!S.monitor;say('Monitor '+(S.monitor?'on':'off'));save()}
+      else if(x==='gate'){const v=onoff(i+1);S.gate=v??!S.gate;say('Gate '+(S.gate?'on':'off'));save()}
+      else if(x==='louder'||x==='up')setVol(S.vol*1.3);
+      else if(x==='quieter'||x==='softer'||x==='down')setVol(S.vol/1.3);
+      else if(x==='calibrate')calibrate();
+      else if(x==='status'||x==='what'){status()}
+    }
+  }finally{
+    const b=batch||[];batch=null;
+    // drop the bare instrument name if an action also spoke
+    const out=b.length>1?b.filter(t=>!INST.some(k=>t===LBL[k])):b;
+    if(out.length)say(out.join('. '));
+  }
+}
+function status(){
+  const counts=countByInst(),parts=INST.filter(k=>counts[k]).map(k=>`${counts[k]} ${LBL[k]}`);
+  say(`${LBL[S.inst]}. ${S.bpm} b p m, ${S.bars} bars, ${S.layers.length} layers. ${parts.join(', ')}`);
+}
+
+/* ---------- transport ---------- */
+function restartClock(){t0=ctx.currentTime+0.1;schedUntil=t0;recent=[]}
+function play(){if(!alive)return;if(!playing){restartClock();playing=true}say('Playing')}
+function stop(){
+  if(rec){const r=rec;rec=null;if(now()>=r.start&&r.hits.length)commit(r);}
+  playing=false;say('Stopped');
+}
+function done(){
+  if(rec){const r=rec;rec=null;if(now()>=r.start&&(r.hits.length||r.pending&&r.pending.length)){r.hits=r.hits.concat(r.pending||[]);commit(r)}else say('Record off');return}
+  if(teach){teach=null;say('Teach cancelled');return}
+  say('Playing');
+}
+const now=()=>ctx.currentTime;
+function setInst(n){S.inst=n;save();say(LBL[n]);if(n==='vox'&&!vox)say('No sample yet. Say sample')}
+function setTempo(n){S.bpm=clamp(n,40,220);save();if(playing){restartClock();rec=null}say(`Tempo ${S.bpm}`)}
+function setBars(n){if(!BAR_CHOICES.includes(n)){say('Bars must be 1, 2, 4, 8 or 16');return}S.bars=n;save();if(playing){restartClock();rec=null}say(`${n} bars`)}
+function setSwing(p){S.swing=clamp(p,0,60);save();$('sw').value=S.swing;$('swv').textContent=S.swing;say(S.swing?`Swing ${S.swing}`:'Swing off')}
+function setVol(v){S.vol=clamp(v,0.1,2);if(master)master.gain.value=S.vol;save();say('Volume '+Math.round(S.vol*100))}
+function setMute(k,m){S.mute[k]=m;save();say((m?'Muted ':'Unmuted ')+LBL[k])}
+function unmuteAll(){S.mute={};for(const l of S.layers)l.mute=false;save();say('All unmuted')}
+function muteLast(m){const l=[...S.layers].reverse().find(l=>!!l.mute!==m);if(!l){say('Nothing to '+(m?'mute':'unmute'));return}l.mute=m;save();say((m?'Muted ':'Unmuted ')+'layer '+l.name)}
+function setKit(v){
+  if(v){const n=Object.keys(S.zones).length;if(n<2){say(`Full kit needs at least two taught zones. You have ${n}. Say teach kick`);return}}
+  S.kit=v;save();say('Full kit '+(v?'on, '+Object.keys(S.zones).map(k=>LBL[k]).join(', '):'off'));
+}
+
+function record(loop){
+  if(!alive)return;
+  if(S.kit&&Object.keys(S.zones).length<2)S.kit=false;
+  if(!playing){restartClock();playing=true}
+  const bpb=4*spb(),n=now();
+  // count-in bar must start at least 0.8 s out so the spoken confirmation clears first
+  const barIdx=Math.ceil((n+0.8-t0)/bpb)+1;
+  const start=t0+barIdx*bpb;
+  rec={inst:S.inst,kit:S.kit,loop,start,end:start+LL(),hits:[],pending:[],pass:1};
+  say((loop?'Overdub ':'Record ')+(S.kit?'full kit':LBL[S.inst]));
+}
+
+function snapshot(){hist.push(JSON.stringify({layers:S.layers,mute:S.mute,nextId:S.nextId}));if(hist.length>60)hist.shift()}
+function dedup(hits){
+  hits.sort((a,b)=>a.p-b.p);const out=[];
+  for(const h of hits){const prev=out.findLast?out.findLast(o=>o.i===h.i):[...out].reverse().find(o=>o.i===h.i);if(!prev||h.p-prev.p>0.03)out.push(h);else prev.v=Math.max(prev.v,h.v)}
+  return out;
+}
+function addLayer(hits,name,quiet){
+  snapshot();
+  const id=S.nextId++;
+  S.layers.push({id,name:name+' '+id,hits:dedup(hits)});save();
+  if(quiet)return;
+  const c={};for(const h of hits)c[h.i]=(c[h.i]||0)+1;
+  const ks=Object.keys(c);
+  say(ks.length===1?`${hits.length} ${LBL[ks[0]]} hits`:`${hits.length} hits: `+ks.map(k=>`${c[k]} ${LBL[k]}`).join(', '));
+}
+function commit(r){
+  if(!r.hits.length){if(!(r.loop&&r.pass>1))say('No hits heard');return}
+  addLayer(r.hits,r.kit?'kit':LBL[r.inst],r.loop&&r.pass>1);
+}
+function keep(){
+  if(!playing){say('Not playing');return}
+  const nb=(now()-S.lat/1000-t0)/spb(),lb=LB();
+  const take=recent.filter(h=>h.ab>=nb-lb&&h.ab<nb);
+  if(!take.length){say('Nothing to keep');return}
+  addLayer(take.map(h=>({p:qpos(h.ab),v:h.v,i:S.kit?h.i:S.inst,s:S.inst==='vox'?h.s:-1})),S.kit?'kit':LBL[S.inst]);
+  recent=[];
+}
+function undo(){if(!hist.length){say('Nothing to undo');return}Object.assign(S,JSON.parse(hist.pop()));save();say('Undone')}
+function clearInst(){
+  snapshot();
+  for(const l of S.layers)l.hits=l.hits.filter(h=>h.i!==S.inst);
+  S.layers=S.layers.filter(l=>l.hits.length);save();say(`Cleared ${LBL[S.inst]}`);
+}
+function clearAll(){snapshot();S.layers=[];save();say('Cleared all')}
+function countByInst(){const c={};for(const l of S.layers)for(const h of l.hits)c[h.i]=(c[h.i]||0)+1;return c}
+
+/* ---------- scheduler ---------- */
+function swingOff(p){if(!S.swing)return 0;const s=p*4,r=Math.round(s);return Math.abs(s-r)<0.05&&mod(r,2)===1?(S.swing/100)*spb()/2*0.5:0}
+function schedHits(list,b0,b1,minBeat){
+  const lb=LB();
+  for(const h of list){
+    if(h.p>=lb||S.mute[h.i])continue;
+    for(let ab=h.p+Math.ceil((b0-h.p)/lb)*lb;ab<b1;ab+=lb){
+      if(ab<0||ab<minBeat)continue;
+      const t=t0+ab*spb()+swingOff(h.p);playHit(ctx,master,t,h.i,h.v,h.s);
+      if(h.i!=='hats'&&h.i!=='open')selfT.push(t);
+    }
+  }
+}
+function tick(){
+  const n=now();
+  if(selfT.length>64)selfT=selfT.filter(t=>t>n-1);
+  if(monT.length>64)monT=monT.filter(t=>t>n-1);
+  if(playing){
+    const until=n+0.15,b0=(schedUntil-t0)/spb(),b1=(until-t0)/spb();
+    for(let b=Math.ceil(b0);b<b1;b++){
+      if(b<0)continue;
+      const t=t0+b*spb();
+      const countIn=rec&&rec.pass===1&&t>=rec.start-4*spb()-1e-6&&t<rec.start-1e-6;
+      const recording=rec&&t>=rec.start-1e-6&&t<rec.end;
+      if(countIn)DRUM.click(ctx,master,t,true);
+      else if(S.click||recording)DRUM.click(ctx,master,t,mod(b,4)===0);
+    }
+    for(const l of S.layers)if(!l.mute)schedHits(l.hits,b0,b1,-1);
+    if(rec)schedHits(rec.hits,b0,b1,(rec.end-t0)/spb()-1e-6); // new take plays from the next pass on
+    schedUntil=until;
+    if(rec&&n>rec.end+S.lat/1000+0.15){
+      const r=rec;
+      if(r.loop){
+        commit(r);
+        if(r.hits.length)DRUM.beep(ctx,master,n+0.02);
+        rec={...r,start:r.end,end:r.end+LL(),hits:r.pending,pending:[],pass:r.pass+1};
+      }else{rec=null;commit(r)}
+    }
+    const nb=(n-t0)/spb();if(recent.length>400||(recent.length&&recent[0].ab<nb-2*LB()))recent=recent.filter(h=>h.ab>=nb-2*LB());
+  }
+  render(n);
+}
+
+/* ---------- zones (full-kit mode) ---------- */
+function feat(e){
+  const t0e=e[0]+e[1]+e[2]+1e-12,t1e=e[3]+e[4]+e[5]+1e-12,L=x=>Math.max(-10,Math.log(x));
+  return[L(e[0]/t0e),L(e[1]/t0e),L(e[2]/t0e),L(t1e/t0e)*0.6];
+}
+function classify(f){
+  let best=null,bd=1e9;
+  for(const k in S.zones){const z=S.zones[k];let d=0;for(let j=0;j<4;j++)d+=(f[j]-z[j])**2;if(d<bd){bd=d;best=k}}
+  return best;
+}
+function startTeach(k){teach={inst:k,fs:[]};say(`Teach ${LBL[k]}. Hit that spot eight times`)}
+
+/* ---------- hits ---------- */
+const qpos=ab=>{let p=mod(ab,LB());if(S.quant)p=mod(Math.round(p*4)/4,LB());return Math.round(p*1000)/1000};
+function onMsg(m){if(m.cap)onCapture(m.cap);else onHit(m)}
+function onHit(m){
+  const raw=m.t;
+  if(capturing)return;
+  if(speechSynthesis.speaking&&!(rec&&raw>=rec.start-0.2))return;
+  const L=S.lat/1000,t=raw-L;
+  if(monT.some(x=>raw-x>-0.02&&raw-x<L+0.12))return;
+  if(S.gate&&selfT.some(x=>raw-x>-0.02&&raw-x<L+0.06))return;
+  const f=feat(m.f||[1,1,1,1,1,1]);
+  const v=Math.round(clamp(0.35+0.65*Math.log(Math.max(1,m.r/S.sens))/Math.log(6),0.3,1)*100)/100;
+  if(cal){cal.hits.push(raw);flash('cal');return}
+  if(tap){tap.push(raw);flash('tap');if(tap.length>=4){const iv=(tap[3]-tap[0])/3;tap=null;setTempo(Math.round(60/iv))}return}
+  if(teach){
+    teach.fs.push(f);flash('teach '+teach.fs.length);
+    if(teach.fs.length>=8){const k=teach.inst,z=[0,0,0,0];for(const x of teach.fs)for(let j=0;j<4;j++)z[j]+=x[j]/teach.fs.length;S.zones[k]=z;teach=null;save();say(`${LBL[k]} learned. ${Object.keys(S.zones).length} zones`)}
+    else DRUM.click(ctx,master,now()+0.01,false);
+    return;
+  }
+  const useKit=rec?rec.kit:S.kit;
+  const i=useKit?(classify(f)||S.inst):(rec?rec.inst:S.inst);
+  flash(LBL[i]);
+  const sIdx=i==='vox'&&S.chop&&vox?(voxRR++%vox.slices.length):-1;
+  if(S.monitor){const x=now()+0.005;playHit(ctx,master,x,i,v,sIdx);monT.push(x)}
+  if(!playing)return;
+  const ab=(t-t0)/spb();
+  if(rec&&t>=rec.start-spb()/4&&t<rec.end-spb()/4){rec.hits.push({p:qpos(ab),v,i,s:sIdx})}
+  else if(rec&&rec.loop&&t>=rec.end-spb()/4){rec.pending.push({p:qpos(ab),v,i,s:sIdx})}
+  else if(!rec)recent.push({ab,v,i,s:sIdx});
+}
+let flashT=0;
+function flash(txt){const el=$('hit');el.classList.add('on');$('hitlbl').textContent=txt;clearTimeout(flashT);flashT=setTimeout(()=>el.classList.remove('on'),80)}
+
+function tapTempo(){tap=[];say('Tap four')}
+
+function calibrate(){
+  if(!alive)return;
+  playing=false;rec=null;
+  const first=now()+2.5,iv=0.6,clicks=[];
+  for(let i=0;i<8;i++){const t=first+i*iv;clicks.push(t);DRUM.click(ctx,master,t,true)}
+  cal={clicks,hits:[]};
+  say('Hit along with eight clicks');
+  setTimeout(()=>{
+    const c=cal;cal=null;const d=[];
+    for(const ct of c.clicks){let best=null;for(const h of c.hits){const x=h-ct;if(x>-0.15&&x<0.45&&(best===null||Math.abs(x)<Math.abs(best)))best=x}if(best!==null)d.push(best)}
+    if(d.length<5){say('Calibration failed, '+d.length+' hits matched');return}
+    d.sort((a,b)=>a-b);setLat(Math.max(0,Math.round(d[d.length>>1]*1000)));
+    say(`Latency ${S.lat} milliseconds`);
+  },(2.5+8*iv+0.8)*1000);
+}
+
+/* ---------- vocal sampling ---------- */
+async function sample(){
+  if(!alive||capturing)return;
+  say('Sing after the beep. Two seconds');
+  // flush the batched confirmation now so we can wait on it
+  if(batch){const b=batch;batch=null;say(b.join('. '))}
+  await waitSpeech();
+  capturing=true;
+  DRUM.beep(ctx,master,now()+0.02);
+  setTimeout(()=>setDet({cap:Math.round(2*ctx.sampleRate)}),180);
+  setTimeout(()=>{if(capturing){capturing=false;say('Sample failed')}},4000);
+}
+function onCapture(d){
+  capturing=false;
+  const sr=ctx.sampleRate;let peak=0;for(const x of d)peak=Math.max(peak,Math.abs(x));
+  if(peak<0.01){say('Too quiet. Try again');return}
+  const thA=peak*0.12;let a=0,b=d.length-1;
+  while(a<d.length&&Math.abs(d[a])<thA)a++;while(b>a&&Math.abs(d[b])<peak*0.04)b--;
+  a=Math.max(0,a-Math.round(0.01*sr));b=Math.min(d.length,b+Math.round(0.06*sr));
+  const g=0.9/peak,out=new Float32Array(b-a);for(let i=0;i<out.length;i++)out[i]=d[a+i]*g;
+  setVox(out,sr);saveVox(out,sr);
+  setInst('vox');say(`Sample ${vox.slices.length} chops`);
+}
+function setVox(data,sr){
+  const buf=ctx.createBuffer(1,data.length,sr);buf.getChannelData(0).set(data);
+  // slice at onsets: 10 ms frames, a jump in loudness starts a new chop
+  const fr=Math.round(0.01*sr),nf=Math.floor(data.length/fr),rms=[];let mx=0;
+  for(let k=0;k<nf;k++){let s=0;for(let i=k*fr;i<(k+1)*fr;i++)s+=data[i]*data[i];const r=Math.sqrt(s/fr);rms.push(r);if(r>mx)mx=r}
+  const on=[0];
+  for(let k=2;k<nf;k++)if(rms[k]>mx*0.15&&rms[k]>1.8*Math.min(rms[k-1],rms[k-2])+1e-4&&k-on[on.length-1]>=9)on.push(k);
+  let sl=[];
+  if(on.length>=2){for(let j=0;j<on.length&&j<8;j++)sl.push([on[j]*fr/sr,(j+1<on.length?on[j+1]*fr:data.length)/sr])}
+  else{const n=4,len=data.length/sr/n;for(let j=0;j<n;j++)sl.push([j*len,(j+1)*len])}
+  vox={buf,slices:sl};voxRR=0;
+}
+function saveVox(data,sr){
+  try{const i16=new Int16Array(data.length);for(let i=0;i<data.length;i++)i16[i]=clamp(data[i],-1,1)*32767;
+    const u8=new Uint8Array(i16.buffer);let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));
+    localStorage.setItem('wheelbeat_vox',JSON.stringify({sr,b64:btoa(s)}))}catch(e){log('vox not saved: '+e.message)}
+}
+function loadVox(){
+  try{const o=JSON.parse(localStorage.getItem('wheelbeat_vox')||'null');if(!o)return;
+    const s=atob(o.b64),u8=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+    const i16=new Int16Array(u8.buffer),f=new Float32Array(i16.length);for(let i=0;i<f.length;i++)f[i]=i16[i]/32767;
+    setVox(f,o.sr)}catch(e){log('vox load failed: '+e.message)}
+}
+
+/* ---------- export ---------- */
+async function exportWav(){
+  const sr=44100,loops=2,len=Math.ceil((LL()*loops+1.5)*sr);
+  const oc=new OfflineAudioContext(1,len,sr),out=oc.createGain();out.gain.value=S.vol;out.connect(oc.destination);
+  for(let L=0;L<loops;L++)for(const l of S.layers)if(!l.mute)for(const h of l.hits)if(h.p<LB()&&!S.mute[h.i])playHit(oc,out,0.05+(L*LB()+h.p)*spb()+swingOff(h.p),h.i,h.v,h.s);
+  const buf=await oc.startRendering(),d=buf.getChannelData(0);
+  const ab=new ArrayBuffer(44+d.length*2),v=new DataView(ab);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  ws(0,'RIFF');v.setUint32(4,36+d.length*2,true);ws(8,'WAVE');ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,d.length*2,true);
+  for(let i=0;i<d.length;i++)v.setInt16(44+i*2,clamp(d[i],-1,1)*32767,true);
+  const name=`wheelbeat-${S.bpm}bpm.wav`,file=new File([ab],name,{type:'audio/wav'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(_){}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;a.click();
+}
+
+/* ---------- UI ---------- */
+function setLat(v){S.lat=v;$('lat').value=v;$('latv').textContent=v;save()}
+function setSens(v){S.sens=v;$('sens').value=v;$('sensv').textContent=v.toFixed(1);setDet({th:v});save()}
+const cv=$('grid'),g2=cv.getContext('2d');
+function render(n){
+  const st=capturing?'SAMPLING':teach?'TEACH '+teach.fs.length+'/8':rec?(n<rec.start?'COUNT-IN':rec.loop?'OVERDUB '+rec.pass:'REC'):'';
+  document.body.className=st==='REC'||st.startsWith('OVERDUB')?'rec':st==='COUNT-IN'?'count':st.startsWith('TEACH')?'teach':st==='SAMPLING'?'cap':'';
+  const head=rec?(rec.kit?'FULL KIT':LBL[rec.inst].toUpperCase()):teach?LBL[teach.inst].toUpperCase():(S.kit?'FULL KIT':LBL[S.inst].toUpperCase());
+  if($('inst').textContent!==head)$('inst').textContent=head;
+  let sub=st;if(rec&&n<rec.start)sub+=' '+Math.ceil((rec.start-n)/spb());
+  if($('sub').textContent!==sub)$('sub').textContent=sub;
+  const muted=INST.filter(k=>S.mute[k]).map(k=>LBL[k]);
+  const txt=`${playing?'▶ playing':'■ stopped'} · ${S.bpm} bpm · ${S.bars} bars · ${S.layers.length} layers\nquant ${S.quant?'on':'off'} · swing ${S.swing}% · click ${S.click?'on':'off'} · gate ${S.gate?'on':'off'} · lat ${S.lat}ms`+(muted.length?`\nmuted: ${muted.join(', ')}`:'')+(Object.keys(S.zones).length?`\nzones: ${Object.keys(S.zones).map(k=>LBL[k]).join(', ')}`:'');
+  if(txt!==$('status').textContent)$('status').textContent=txt;
+  $('bPlay').textContent=playing?'Stop':'Play';
+  $('bKit').classList.toggle('on',S.kit);$('bMon').classList.toggle('on',S.monitor);$('bQ').classList.toggle('on',S.quant);$('bGate').classList.toggle('on',S.gate);
+  $('bRec').classList.toggle('on',!!rec&&!rec.loop);$('bDub').classList.toggle('on',!!rec&&rec.loop);
+  drawGrid(n);
+}
+function drawGrid(n){
+  const dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
+  if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr}
+  g2.setTransform(dpr,0,0,dpr,0,0);g2.clearRect(0,0,W,H);
+  const lb=LB(),c=countByInst(),lanes=INST.filter(k=>c[k]||k===S.inst||(rec&&rec.hits.some(h=>h.i===k)));
+  const lh=H/Math.max(lanes.length,1),xs=W/lb;
+  for(let b=0;b<=lb;b++){g2.fillStyle=b%4===0?'#333':'#1d1d1d';g2.fillRect(b*xs,0,1,H)}
+  lanes.forEach((k,li)=>{
+    const y=li*lh;
+    g2.fillStyle=S.mute[k]?'#555':COL[k];g2.globalAlpha=0.5;g2.font='11px -apple-system';g2.fillText(LBL[k],3,y+12);g2.globalAlpha=1;
+    const draw=(h,a)=>{g2.globalAlpha=a*(0.35+0.65*h.v);g2.fillRect(h.p*xs,y+3,Math.max(3,xs/4-1),lh-6)};
+    for(const l of S.layers)for(const h of l.hits)if(h.i===k)draw(h,l.mute||S.mute[k]?0.25:1);
+    if(rec){g2.fillStyle='#fff';for(const h of rec.hits)if(h.i===k)draw(h,0.9)}
+    g2.globalAlpha=1;
+  });
+  if(playing){g2.fillStyle='#fff';g2.fillRect(mod((n-t0)/spb(),lb)*xs,0,2,H)}
+}
+$('go').onclick=start;
+$('bRec').onclick=()=>rec?done():record(false);
+$('bDub').onclick=()=>rec?done():record(true);
+$('bPlay').onclick=()=>playing?stop():play();
+$('bInst').onclick=()=>setInst(INST[(INST.indexOf(S.inst)+1)%INST.length]);
+$('bUndo').onclick=undo;
+$('bKeep').onclick=keep;
+$('bKit').onclick=()=>setKit(!S.kit);
+$('bTeach').onclick=()=>teach?(teach=null,say('Teach cancelled')):startTeach(S.inst);
+$('bCal').onclick=calibrate;
+$('bSamp').onclick=sample;
+$('bExp').onclick=exportWav;
+$('bClr').onclick=clearInst;
+$('bClrAll').onclick=clearAll;
+$('bGate').onclick=()=>{S.gate=!S.gate;save();say('Gate '+(S.gate?'on':'off'))};
+$('bMon').onclick=()=>{S.monitor=!S.monitor;save();say('Monitor '+(S.monitor?'on':'off'))};
+$('bQ').onclick=()=>{S.quant=!S.quant;save();say('Quantize '+(S.quant?'on':'off'))};
+$('sens').oninput=e=>setSens(parseFloat(e.target.value));
+$('lat').oninput=e=>setLat(parseInt(e.target.value));
+$('sw').oninput=e=>{S.swing=parseInt(e.target.value);$('swv').textContent=S.swing;save()};
+setLat(S.lat);$('sens').value=S.sens;$('sensv').textContent=S.sens.toFixed(1);$('sw').value=S.swing;$('swv').textContent=S.swing;
+$('status').textContent='Tap Start once, then it’s voice only.';
+drawGrid(0);
+</script>
+</body></html>
