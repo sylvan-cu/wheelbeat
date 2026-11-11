@@ -25,7 +25,16 @@ button.on{background:#2a6}
 #mlvl{position:absolute;left:0;top:0;bottom:0;width:0;background:#4a8}
 #mth{position:absolute;top:0;bottom:0;width:2px;left:50%;background:#fb3}
 #hitlbl{font:600 13px ui-monospace,monospace;opacity:.75;flex:1;white-space:nowrap;overflow:hidden}
-#bSet{padding:4px 12px;font-size:20px;background:#222}
+#bSet,#bCar{padding:4px 12px;font-size:20px;background:#222}
+#bCar.on{background:#2a6}
+#grid{display:none;width:100%;height:80px;background:#0b0b0b;border-radius:10px;margin:4px 0 8px;flex:none}
+#main.car #panel,#main.car #bPrev,#main.car #bRedo{display:none}
+#main.car #grid{display:block}
+#main.car #inst{font-size:44px}
+#main.car #sub{font-size:21px}
+#main.car #prompt{font-size:17px}
+#main.car .big.half .bl{font-size:36px}
+#main.car .big.half .bs{font-size:16px}
 #inst{font:800 36px -apple-system,sans-serif;text-align:center;letter-spacing:1px;line-height:1.05;flex:none}
 #sub{font:700 18px -apple-system,sans-serif;text-align:center;min-height:1.3em;opacity:.9;flex:none}
 #prompt{font:500 15px -apple-system,sans-serif;text-align:center;opacity:.85;height:2.6em;overflow:hidden;line-height:1.3em;margin:2px 0;flex:none}
@@ -83,10 +92,11 @@ input[type=range]{width:100%}
 </style></head><body>
 <button id="go">TAP TO START<small>then talk, or use the four big buttons</small></button>
 <div id="main">
- <div id="topbar"><div id="hit"></div><div id="meter"><i id="mlvl"></i><b id="mth"></b></div><div id="hitlbl">mic off</div><button id="bSet">⚙︎</button></div>
+ <div id="topbar"><div id="hit"></div><div id="meter"><i id="mlvl"></i><b id="mth"></b></div><div id="hitlbl">mic off</div><button id="bCar" aria-label="Car mode">🚗</button><button id="bSet">⚙︎</button></div>
  <div id="inst">KICK</div>
  <div id="sub"></div>
  <div id="prompt"></div>
+ <canvas id="grid"></canvas>
  <div id="panel">
   <div id="tabs"><button id="tTracks">TRACKS</button><button id="tSong">SONG</button><div id="secinfo"></div></div>
   <div id="tracks"></div>
@@ -153,7 +163,7 @@ const LETTERS='ABCDEFGH';
 const TEACH_N=6;
 const DEF={bpm:90,inst:'kick',secs:[{id:'A',len:0,layers:[]}],cur:0,song:[{s:'A',n:2}],mode:'loop',sel:-1,slot:0,view:'tracks',
   mute:{},quant:true,click:true,monitor:false,gate:true,lat:90,sens:3.5,swing:0,vol:0.9,kit:false,zones:{},nextId:1,
-  sound:'real',mic:'iphone',duplex:'full',ec:false,guide:true};
+  sound:'real',mic:'iphone',duplex:'full',ec:false,guide:true,car:false};
 const S=JSON.parse(JSON.stringify(DEF));
 try{
   const old=JSON.parse(localStorage.getItem('wheelbeat')||'{}');
@@ -1139,7 +1149,8 @@ function render(n){
   if(!mic&&!$('hit').classList.contains('on'))setTxt('hitlbl','mic off');
   else if(micMuted&&!$('hit').classList.contains('on'))setTxt('hitlbl','mic muted by iOS');
   for(const sg of document.querySelectorAll('.seg')){const k=sg.dataset.key,val=S[k];for(const b of sg.children){const v=b.dataset.v,on=typeof val==='boolean'?(v==='1')===val:String(val)===v;b.classList.toggle('on',on)}}
-  renderPanel(n);
+  $('main').classList.toggle('car',!!S.car);$('bCar').classList.toggle('on',!!S.car);
+  if(S.car)drawGrid(n);else renderPanel(n);
 }
 
 /* panel: TRACKS = mixer rows with each track's pattern; SONG = parts and their order */
@@ -1208,6 +1219,20 @@ function renderPanel(n){
     if(sig!==songSig){songSig=sig;buildSong()}
   }
 }
+// car mode: one strip, a lane per sound in the current part, no small controls
+function drawGrid(n){
+  const s=sec(),L=SL(s),items={},pos=partPos(s,n);
+  for(const l of s.layers){if(l.mute)continue;const ll=layerLen(l,s);for(let j=0;j*ll<L;j++)for(const h of l.hits)if(h.p<ll&&j*ll+h.p<L)(items[h.i]=items[h.i]||[]).push({h,x:j*ll+h.p})}
+  if(rec)for(const h of rec.hits)(items[h.i]=items[h.i]||[]).push({h,x:rec.open?mod(h.ab-rec.startBeat,64):mod(h.ab-anchor,L),r:1});
+  const cv=$('grid'),dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;if(!W)return;
+  if(cv.width!==Math.round(W*dpr)||cv.height!==Math.round(H*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  const lanes=INST.filter(k=>items[k]),lh=H/Math.max(1,lanes.length),xs=W/L;
+  for(let b=0;b<=L;b+=4){g.fillStyle=b%8===0?'#333':'#1d1d1d';g.fillRect(b*xs,0,1,H)}
+  lanes.forEach((k,li)=>{g.fillStyle=S.mute[k]?'#555':COL[k];for(const it of items[k]){if(it.x>=L)continue;g.globalAlpha=0.35+0.65*(it.h.v??0.8);g.fillRect(it.x*xs,li*lh+1,Math.max(3,(it.h.d?it.h.d*xs:xs/4)-1),Math.max(2,lh-2))}g.globalAlpha=1});
+  if(!lanes.length){g.fillStyle='#555';g.font='14px -apple-system';g.fillText(`part ${s.id} · empty`,8,H/2+5)}
+  if(pos!=null){g.fillStyle='#fff';g.fillRect(mod(pos,L)*xs,0,2,H)}
+}
 function setTxt2(e,t){if(e&&e.textContent!==t)e.textContent=t}
 function chip(txt,cls,fn){const b=document.createElement('button');b.className='chip '+(cls||'');b.textContent=txt;tapEl(b,fn);return b}
 function buildSong(){
@@ -1239,6 +1264,7 @@ tapEl($('sM'),()=>{const sl=S.song[S.slot];if(sl&&sl.n>1){S.cur=Math.max(0,S.sec
 tapEl($('sP'),()=>{const sl=S.song[S.slot];if(sl){S.cur=Math.max(0,S.secs.findIndex(q=>q.id===sl.s));setReps(sl.n+1)}});
 tapEl($('bLoopM'),loopMode);tapEl($('bSongM'),()=>{if(!playing&&songLen()){S.mode='song';play()}else playSong()});
 $('go').onclick=start;
+$('bCar').onclick=()=>{S.car=!S.car;save();if(alive)say(S.car?'Car mode':'Full screen')};
 $('bSet').onclick=()=>$('sheet').classList.add('open');
 $('close').onclick=()=>$('sheet').classList.remove('open');
 for(const sg of document.querySelectorAll('.seg'))for(const b of sg.children)b.onclick=()=>setOpt(sg.dataset.key,b.dataset.v);
