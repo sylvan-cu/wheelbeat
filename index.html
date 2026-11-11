@@ -8,24 +8,33 @@
 <meta name="apple-mobile-web-app-title" content="WheelBeat">
 <title>WheelBeat</title>
 <style>
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
-body{font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:max(14px,env(safe-area-inset-top)) 14px 24px;transition:background .15s;-webkit-user-select:none;user-select:none}
+body{font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:0 12px 24px;transition:background .15s;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 body.rec{background:#3a0d0d}body.count{background:#3a2c0d}body.teach{background:#0d2a3a}body.cap{background:#2a0d3a}
-button{font:600 17px -apple-system,sans-serif;padding:15px 6px;border-radius:12px;border:0;background:#2b2b2b;color:#fff}
-button:active{background:#444}
+button{font:600 16px -apple-system,sans-serif;padding:14px 6px;border-radius:12px;border:0;background:#2b2b2b;color:#fff}
 button.on{background:#2a6}
-#go{width:100%;font-size:26px;padding:22px;background:#2a6}
-#inst{font:800 50px -apple-system,sans-serif;text-align:center;margin:10px 0 0;letter-spacing:1px;line-height:1.05}
+#go{position:fixed;inset:0;z-index:9;width:100%;border-radius:0;font:800 44px -apple-system,sans-serif;background:#163;color:#fff}
+#go small{display:block;font:500 18px -apple-system,sans-serif;opacity:.8;margin-top:10px}
+#main{height:100vh;height:100dvh;display:flex;flex-direction:column;padding-top:max(10px,env(safe-area-inset-top));padding-bottom:max(10px,env(safe-area-inset-bottom))}
+#inst{font:800 44px -apple-system,sans-serif;text-align:center;letter-spacing:1px;line-height:1.05}
 #sub{font:700 20px -apple-system,sans-serif;text-align:center;min-height:1.3em;opacity:.9}
-#status{font-size:15px;text-align:center;white-space:pre-line;opacity:.8;margin:6px 0 10px}
-#grid{width:100%;height:170px;display:block;background:#0b0b0b;border-radius:10px}
+#grid{width:100%;height:90px;display:block;background:#0b0b0b;border-radius:10px;margin:6px 0}
+#status{font-size:13px;text-align:center;white-space:pre-line;opacity:.6;margin-bottom:8px}
+#pad{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:10px;min-height:0}
+.big{border-radius:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px;transition:transform .06s,filter .06s}
+.big.down{transform:scale(.96);filter:brightness(1.5)}
+.big .bl{font:900 38px -apple-system,sans-serif;letter-spacing:1px}
+.big .bs{font:600 17px -apple-system,sans-serif;opacity:.85;text-align:center}
+#bRec{background:#8a1c1c}#bRec.on{background:#e02424}
+#bPlay{background:#1d6b3a}#bPlay.on{background:#2fa65a}
+#bInst{background:#1d4a7a}
+#bUndo{background:#3a3a3a}
 #hitrow{display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0}
 #hit{width:26px;height:26px;border-radius:50%;background:#333}
 #hit.on{background:#4f8}
 #hitlbl{font:600 15px ui-monospace,monospace;min-width:6em;opacity:.8}
 .row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
-.row3{grid-template-columns:repeat(3,1fr)}
 label{display:block;margin:12px 0 4px;font-size:15px}
 input[type=range]{width:100%}
 #heard{font-size:15px;opacity:.7;min-height:1.4em;text-align:center}
@@ -34,16 +43,21 @@ details{margin-top:8px}summary{font-size:15px;opacity:.85;padding:6px 0}
 .help{font-size:13px;opacity:.7;line-height:1.5}
 .help b{opacity:1;color:#fff}
 </style></head><body>
-<button id="go">Start</button>
-<div id="inst">HATS</div>
-<div id="sub"></div>
-<div id="status"></div>
-<canvas id="grid"></canvas>
+<button id="go">TAP TO START<small>then voice or the four big buttons</small></button>
+<div id="main">
+ <div id="inst">HATS</div>
+ <div id="sub"></div>
+ <canvas id="grid"></canvas>
+ <div id="status"></div>
+ <div id="pad">
+  <button id="bRec" class="big"><span class="bl" id="lRec">REC</span><span class="bs" id="sRec">one pass</span></button>
+  <button id="bInst" class="big"><span class="bl">NEXT</span><span class="bs" id="sInst">sound</span></button>
+  <button id="bPlay" class="big"><span class="bl" id="lPlay">PLAY</span><span class="bs" id="sPlay"></span></button>
+  <button id="bUndo" class="big"><span class="bl">UNDO</span><span class="bs" id="sUndo"></span></button>
+ </div>
+</div>
 <div id="hitrow"><div id="hit"></div><div id="hitlbl"></div></div>
 <div id="heard"></div>
-<div class="row">
- <button id="bRec">Rec</button><button id="bPlay">Play</button><button id="bInst">Inst</button><button id="bUndo">Undo</button>
-</div>
 <div class="row">
  <button id="bDub">Overdub</button><button id="bKeep">Keep</button><button id="bKit">Full kit</button><button id="bTeach">Teach</button>
 </div>
@@ -58,6 +72,9 @@ details{margin-top:8px}summary{font-size:15px;opacity:.85;padding:6px 0}
   <button id="bCal">Calib</button><button id="bSamp">Sample</button><button id="bExp">Export</button><button id="bGate">Gate</button>
  </div>
  <div class="row">
+  <button id="bVoice">Voice</button><button id="bSensUp">More sens</button><button id="bSensDn">Less sens</button><button id="bStat">Status</button>
+ </div>
+ <div class="row">
   <button id="bClr">Clear inst</button><button id="bClrAll">Clear all</button><button id="bMon">Monitor</button><button id="bQ">Quant</button>
  </div>
 </details>
@@ -68,7 +85,9 @@ details{margin-top:8px}summary{font-size:15px;opacity:.85;padding:6px 0}
 <b>Edit:</b> undo · clear · clear all · mute kick / unmute kick / mute last / unmute all · solo snare / solo off<br>
 <b>Full kit:</b> teach kick (hit that spot 8 times), teach snare, teach hats… then "full kit on" and record: each hit is sorted by where you hit<br>
 <b>Vocal chops:</b> sample (sing after the beep, 2 seconds) · then "vocal" + record; each hit plays the next chop · chops off = whole sample<br>
-<b>Setup:</b> tempo 92 · tap tempo · bars 8 · swing on/off · quantize on/off · click on/off · monitor on/off · gate on/off · louder / quieter · calibrate · status
+<b>Big buttons:</b> REC records one pass after 4 clicks (tap again to cancel) · NEXT cycles sounds and says how many hits each has · PLAY/STOP · UNDO removes the last layer and says which<br>
+<b>Sounds:</b> two rising tones = take saved · low buzz = heard nothing<br>
+<b>Setup:</b> more sensitive / less sensitive · repeat (what's going on) · tempo 92 · tap tempo · bars 8 · swing on/off · quantize on/off · click on/off · monitor on/off · gate on/off · louder / quieter · calibrate · status
 </div>
 </details>
 <div id="log"></div>
@@ -134,7 +153,10 @@ const DRUM={
     src.connect(g).connect(o);src.start(t,a,dur+0.01);
   },
   click:(c,o,t,acc)=>osc(c,o,t,acc?1500:1000,0,0,acc?0.35:0.18,0.03),
-  beep:(c,o,t)=>osc(c,o,t,2000,0,0,0.3,0.12)
+  beep:(c,o,t)=>osc(c,o,t,2000,0,0,0.3,0.12),
+  good:(c,o,t)=>{osc(c,o,t,880,0,0,0.25,0.09);osc(c,o,t+0.1,1320,0,0,0.25,0.14)},
+  bad:(c,o,t)=>{osc(c,o,t,220,0,0,0.35,0.25,'square')},
+  tap:(c,o,t)=>osc(c,o,t,1200,0,0,0.12,0.02)
 };
 function playHit(c,o,t,i,v,s){
   if(!DRUM[i])return;
@@ -193,7 +215,7 @@ async function start(){
   loadVox();
   let stream;
   try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:false,autoGainControl:false}})}
-  catch(e){log('Mic refused: '+e.message);say('Microphone blocked');return}
+  catch(e){log('Mic refused: '+e.message);say('Microphone blocked. Allow it in Safari settings');$('go').firstChild.textContent='MIC BLOCKED';return}
   const src=ctx.createMediaStreamSource(stream);
   const bq=(type,f,q)=>{const b=ctx.createBiquadFilter();b.type=type;b.frequency.value=f;if(q)b.Q.value=q;return b};
   const merge=ctx.createChannelMerger(5);
@@ -223,10 +245,10 @@ async function start(){
   }
   setDet({th:S.sens});
   alive=true;
-  $('go').textContent='Running · tap to re-arm voice';$('go').style.background='#333';$('go').onclick=()=>{try{recog&&recog.start()}catch(_){}ctx.resume()};
+  $('go').style.display='none';
   startRecog();keepAwake();
   setInterval(tick,25);
-  say(S.layers.length?`Ready. ${S.layers.length} layers loaded. Say play.`:'Ready. Say hats, then record.');
+  say(S.layers.length?`Ready. ${S.layers.length} layers loaded. Press play.`:`Ready. ${LBL[S.inst]} selected. Press record.`);
 }
 
 async function keepAwake(){
@@ -250,7 +272,8 @@ const INSTW={kick:'kick',kicks:'kick',snare:'snare',snares:'snare',hats:'hats',h
 const TAKES_INST=new Set(['mute','unmute','solo','teach']);
 function command(raw){
   const said=raw.trim().toLowerCase();
-  if(performance.now()-lastSaidAt<4000&&lastSaid.includes(said))return; // it heard its own voice
+  // it heard its own voice: only multi-word echoes are dropped, so a bare "play" after "Playing…" still works
+  if(performance.now()-lastSaidAt<5000&&said.split(/\s+/).length>=2&&lastSaid.replace(/[^a-z0-9 ]/g,' ').includes(said.replace(/[^a-z0-9 ]/g,' ')))return;
   $('heard').textContent='“'+raw.trim()+'”';log('< '+raw.trim());
   let s=' '+said.replace(/[^a-z0-9 ]/g,' ')+' ';
   s=s.replace(/\bopen (hi |high )?hi ?hats?\b/g,'open').replace(/\bopen (hi|high) ?hats?\b/g,'open')
@@ -295,8 +318,9 @@ function command(raw){
       else if(x==='gate'){const v=onoff(i+1);S.gate=v??!S.gate;say('Gate '+(S.gate?'on':'off'));save()}
       else if(x==='louder'||x==='up')setVol(S.vol*1.3);
       else if(x==='quieter'||x==='softer'||x==='down')setVol(S.vol/1.3);
+      else if((x==='more'||x==='less')&&(nx==='sensitive'||nx==='sensitivity')){bumpSens(x==='more');i++}
       else if(x==='calibrate')calibrate();
-      else if(x==='status'||x==='what'){status()}
+      else if(x==='status'||x==='what'||x==='repeat'||x==='where'){status()}
     }
   }finally{
     const b=batch||[];batch=null;
@@ -305,25 +329,33 @@ function command(raw){
     if(out.length)say(out.join('. '));
   }
 }
-function status(){
-  const counts=countByInst(),parts=INST.filter(k=>counts[k]).map(k=>`${counts[k]} ${LBL[k]}`);
-  say(`${LBL[S.inst]}. ${S.bpm} b p m, ${S.bars} bars, ${S.layers.length} layers. ${parts.join(', ')}`);
+function layerSummary(){
+  if(!S.layers.length)return 'Nothing recorded';
+  const c=countByInst(),parts=INST.filter(k=>c[k]).map(k=>LBL[k]+(S.mute[k]?' muted':''));
+  return `${S.layers.length} layer${S.layers.length>1?'s':''}: ${parts.join(', ')}`;
 }
+function status(){
+  say(`${S.kit?'Full kit':LBL[S.inst]} selected. ${rec?'Recording':playing?'Playing':'Stopped'}. ${S.bpm} b p m, ${S.bars} bars. ${layerSummary()}`);
+}
+function bumpSens(more){setSens(clamp(+(S.sens+(more?-0.7:0.7)).toFixed(1),1.5,10));say((more?'More':'Less')+' sensitive')}
 
 /* ---------- transport ---------- */
 function restartClock(){t0=ctx.currentTime+0.1;schedUntil=t0;recent=[]}
-function play(){if(!alive)return;if(!playing){restartClock();playing=true}say('Playing')}
+function play(){if(!alive)return;if(!playing){restartClock();playing=true}say(S.layers.length?'Playing '+layerSummary():'Playing. Nothing recorded yet')}
 function stop(){
   if(rec){const r=rec;rec=null;if(now()>=r.start&&r.hits.length)commit(r);}
   playing=false;say('Stopped');
 }
 function done(){
-  if(rec){const r=rec;rec=null;if(now()>=r.start&&(r.hits.length||r.pending&&r.pending.length)){r.hits=r.hits.concat(r.pending||[]);commit(r)}else say('Record off');return}
+  if(rec){const r=rec;rec=null;if(now()>=r.start&&(r.hits.length||r.pending&&r.pending.length)){r.hits=r.hits.concat(r.pending||[]);commit(r)}else say('Recording cancelled');return}
   if(teach){teach=null;say('Teach cancelled');return}
   say('Playing');
 }
 const now=()=>ctx.currentTime;
-function setInst(n){S.inst=n;save();say(LBL[n]);if(n==='vox'&&!vox)say('No sample yet. Say sample')}
+function setInst(n,detail){S.inst=n;save();
+  if(!detail){say(LBL[n]);}
+  else{const c=countByInst()[n]||0;say(LBL[n]+(c?`, ${c} hits`:', empty'))}
+  if(n==='vox'&&!vox)say('No sample yet. Say sample')}
 function setTempo(n){S.bpm=clamp(n,40,220);save();if(playing){restartClock();rec=null}say(`Tempo ${S.bpm}`)}
 function setBars(n){if(!BAR_CHOICES.includes(n)){say('Bars must be 1, 2, 4, 8 or 16');return}S.bars=n;save();if(playing){restartClock();rec=null}say(`${n} bars`)}
 function setSwing(p){S.swing=clamp(p,0,60);save();$('sw').value=S.swing;$('swv').textContent=S.swing;say(S.swing?`Swing ${S.swing}`:'Swing off')}
@@ -345,7 +377,7 @@ function record(loop){
   const barIdx=Math.ceil((n+0.8-t0)/bpb)+1;
   const start=t0+barIdx*bpb;
   rec={inst:S.inst,kit:S.kit,loop,start,end:start+LL(),hits:[],pending:[],pass:1};
-  say((loop?'Overdub ':'Record ')+(S.kit?'full kit':LBL[S.inst]));
+  say((loop?'Overdub ':'Recording ')+(S.kit?'full kit':LBL[S.inst]));
 }
 
 function snapshot(){hist.push(JSON.stringify({layers:S.layers,mute:S.mute,nextId:S.nextId}));if(hist.length>60)hist.shift()}
@@ -358,24 +390,34 @@ function addLayer(hits,name,quiet){
   snapshot();
   const id=S.nextId++;
   S.layers.push({id,name:name+' '+id,hits:dedup(hits)});save();
-  if(quiet)return;
+  if(quiet){DRUM.good(ctx,master,now()+0.02);return}
   const c={};for(const h of hits)c[h.i]=(c[h.i]||0)+1;
-  const ks=Object.keys(c);
-  say(ks.length===1?`${hits.length} ${LBL[ks[0]]} hits`:`${hits.length} hits: `+ks.map(k=>`${c[k]} ${LBL[k]}`).join(', '));
+  const ks=Object.keys(c),n=S.layers.length;
+  DRUM.good(ctx,master,now()+0.02);
+  let msg=(ks.length===1?`Got ${hits.length} ${LBL[ks[0]]}`:`Got ${hits.length}: `+ks.map(k=>`${c[k]} ${LBL[k]}`).join(', '))+`. ${n} layer${n>1?'s':''}`;
+  if(hits.length>LB()*3)msg+='. That is a lot, might be noise. Say less sensitive, or undo';
+  else if(hits.length<=2)msg+='. Only a few. Say undo to drop it';
+  say(msg);
 }
 function commit(r){
-  if(!r.hits.length){if(!(r.loop&&r.pass>1))say('No hits heard');return}
+  if(!r.hits.length){DRUM.bad(ctx,master,now()+0.02);if(!(r.loop&&r.pass>1))say('Heard nothing. Hit harder, or say more sensitive');return}
   addLayer(r.hits,r.kit?'kit':LBL[r.inst],r.loop&&r.pass>1);
 }
 function keep(){
-  if(!playing){say('Not playing');return}
+  if(!playing){say('Press play and drum along first');return}
   const nb=(now()-S.lat/1000-t0)/spb(),lb=LB();
   const take=recent.filter(h=>h.ab>=nb-lb&&h.ab<nb);
-  if(!take.length){say('Nothing to keep');return}
+  if(!take.length){DRUM.bad(ctx,master,now()+0.02);say('Nothing to keep. Drum a full pass first');return}
   addLayer(take.map(h=>({p:qpos(h.ab),v:h.v,i:S.kit?h.i:S.inst,s:S.inst==='vox'?h.s:-1})),S.kit?'kit':LBL[S.inst]);
   recent=[];
 }
-function undo(){if(!hist.length){say('Nothing to undo');return}Object.assign(S,JSON.parse(hist.pop()));save();say('Undone')}
+function undo(){
+  if(rec){done();return}
+  if(!hist.length){say('Nothing to undo');return}
+  const before=S.layers.length,last=S.layers[before-1];
+  Object.assign(S,JSON.parse(hist.pop()));save();
+  say((S.layers.length<before&&last?`Removed ${last.name.replace(/ \d+$/,'')}. `:'Undone. ')+layerSummary());
+}
 function clearInst(){
   snapshot();
   for(const l of S.layers)l.hits=l.hits.filter(h=>h.i!==S.inst);
@@ -418,7 +460,6 @@ function tick(){
       const r=rec;
       if(r.loop){
         commit(r);
-        if(r.hits.length)DRUM.beep(ctx,master,n+0.02);
         rec={...r,start:r.end,end:r.end+LL(),hits:r.pending,pending:[],pass:r.pass+1};
       }else{rec=null;commit(r)}
     }
@@ -568,9 +609,14 @@ function render(n){
   const muted=INST.filter(k=>S.mute[k]).map(k=>LBL[k]);
   const txt=`${playing?'▶ playing':'■ stopped'} · ${S.bpm} bpm · ${S.bars} bars · ${S.layers.length} layers\nquant ${S.quant?'on':'off'} · swing ${S.swing}% · click ${S.click?'on':'off'} · gate ${S.gate?'on':'off'} · lat ${S.lat}ms`+(muted.length?`\nmuted: ${muted.join(', ')}`:'')+(Object.keys(S.zones).length?`\nzones: ${Object.keys(S.zones).map(k=>LBL[k]).join(', ')}`:'');
   if(txt!==$('status').textContent)$('status').textContent=txt;
-  $('bPlay').textContent=playing?'Stop':'Play';
+  $('lPlay').textContent=playing?'STOP':'PLAY';$('bPlay').classList.toggle('on',playing);
+  $('lRec').textContent=rec?(n<rec.start?'COUNT':'REC ●'):'REC';
+  $('sRec').textContent=rec?'tap to cancel':(S.kit?'full kit':LBL[S.inst])+' · one pass';
+  $('sInst').textContent=S.kit?'full kit':LBL[S.inst];
+  $('sPlay').textContent=S.layers.length?layerSummary().split(':')[0]:'empty';
+  $('sUndo').textContent=rec?'cancel take':S.layers.length?'last: '+S.layers[S.layers.length-1].name.replace(/ \d+$/,''):'';
   $('bKit').classList.toggle('on',S.kit);$('bMon').classList.toggle('on',S.monitor);$('bQ').classList.toggle('on',S.quant);$('bGate').classList.toggle('on',S.gate);
-  $('bRec').classList.toggle('on',!!rec&&!rec.loop);$('bDub').classList.toggle('on',!!rec&&rec.loop);
+  $('bRec').classList.toggle('on',!!rec);$('bDub').classList.toggle('on',!!rec&&rec.loop);
   drawGrid(n);
 }
 function drawGrid(n){
@@ -591,11 +637,15 @@ function drawGrid(n){
   if(playing){g2.fillStyle='#fff';g2.fillRect(mod((n-t0)/spb(),lb)*xs,0,2,H)}
 }
 $('go').onclick=start;
-$('bRec').onclick=()=>rec?done():record(false);
+const CYCLE=['kick','snare','hats','clap','open','rim','tom','cow','vox'];
+function big(id,fn){const b=$(id);b.addEventListener('pointerdown',e=>{e.preventDefault();if(!alive)return;b.classList.add('down');setTimeout(()=>b.classList.remove('down'),120);DRUM.tap(ctx,master,now()+0.005);fn()})}
+big('bRec',()=>rec?done():record(false));
+big('bInst',()=>{const c=CYCLE.filter(k=>k!=='vox'||vox);if(S.kit)setKit(false);setInst(c[(c.indexOf(S.inst)+1)%c.length],true)});
+big('bPlay',()=>playing?stop():play());
+big('bUndo',undo);
+$('bVoice').onclick=()=>{try{recog&&recog.start()}catch(_){}ctx&&ctx.resume();say('Listening')};
+$('bSensUp').onclick=()=>bumpSens(true);$('bSensDn').onclick=()=>bumpSens(false);$('bStat').onclick=status;
 $('bDub').onclick=()=>rec?done():record(true);
-$('bPlay').onclick=()=>playing?stop():play();
-$('bInst').onclick=()=>setInst(INST[(INST.indexOf(S.inst)+1)%INST.length]);
-$('bUndo').onclick=undo;
 $('bKeep').onclick=keep;
 $('bKit').onclick=()=>setKit(!S.kit);
 $('bTeach').onclick=()=>teach?(teach=null,say('Teach cancelled')):startTeach(S.inst);
@@ -611,7 +661,7 @@ $('sens').oninput=e=>setSens(parseFloat(e.target.value));
 $('lat').oninput=e=>setLat(parseInt(e.target.value));
 $('sw').oninput=e=>{S.swing=parseInt(e.target.value);$('swv').textContent=S.swing;save()};
 setLat(S.lat);$('sens').value=S.sens;$('sensv').textContent=S.sens.toFixed(1);$('sw').value=S.swing;$('swv').textContent=S.swing;
-$('status').textContent='Tap Start once, then it’s voice only.';
+
 drawGrid(0);
 </script>
 </body></html>
