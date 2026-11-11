@@ -40,7 +40,7 @@ button.on{background:#2a6}
 #prompt{font:500 15px -apple-system,sans-serif;text-align:center;opacity:.85;height:2.6em;overflow:hidden;line-height:1.3em;margin:2px 0;flex:none}
 #panel{flex:0 0 37%;display:flex;flex-direction:column;background:#0b0b0b;border-radius:12px;margin:2px 0 8px;min-height:0;overflow:hidden}
 #tabs{display:flex;gap:4px;padding:5px;flex:none}
-#tabs button{padding:8px 14px;font-size:14px;font-weight:800;background:#1c1c1c;letter-spacing:.5px}
+#tabs button{padding:8px 10px;font-size:14px;font-weight:800;background:#1c1c1c;letter-spacing:.5px}
 #tabs button.on{background:#3d3d3d}
 #secinfo{flex:1;text-align:right;font:800 15px -apple-system,sans-serif;align-self:center;padding-right:6px;white-space:nowrap;overflow:hidden}
 #tracks{flex:1;display:flex;flex-direction:column;gap:4px;padding:0 5px 5px;min-height:0;overflow-y:auto}
@@ -57,7 +57,14 @@ button.on{background:#2a6}
 .tr button.on{background:#a52}
 .empty{margin:auto;opacity:.5;text-align:center;font-size:15px;padding:10px}
 #song{flex:1;display:none;flex-direction:column;gap:7px;padding:2px 6px 6px;min-height:0;overflow-y:auto}
-#panel.song #song{display:flex}#panel.song #tracks{display:none}
+#panel.song #song{display:flex}#panel.song #tracks,#panel.beats #tracks{display:none}
+#beats{flex:1;display:none;flex-direction:column;gap:5px;padding:2px 6px 6px;min-height:0;overflow-y:auto}
+#panel.beats #beats{display:flex}
+.brow{display:flex;gap:5px;flex:none}
+.brow .bt{flex:1;display:flex;justify-content:space-between;align-items:center;text-align:left;padding:11px 12px;background:#1d1d1d;font-size:16px;font-weight:800;min-width:0}
+.brow .bt small{font:600 12px -apple-system,sans-serif;opacity:.6;white-space:nowrap;margin-left:8px}
+.brow .bt.cur{background:#1d4a7a}
+.brow .bx{width:44px;flex:none;padding:0;background:#222;opacity:.7}
 .srow{display:flex;gap:6px;align-items:flex-start}
 .sl{font:700 11px -apple-system,sans-serif;opacity:.5;width:44px;flex:none;padding-top:12px;letter-spacing:.5px}
 .chips{display:flex;flex-wrap:wrap;gap:5px;flex:1}
@@ -98,7 +105,7 @@ input[type=range]{width:100%}
  <div id="prompt"></div>
  <canvas id="grid"></canvas>
  <div id="panel">
-  <div id="tabs"><button id="tTracks">TRACKS</button><button id="tSong">SONG</button><div id="secinfo"></div></div>
+  <div id="tabs"><button id="tTracks">TRACKS</button><button id="tSong">SONG</button><button id="tBeats">BEATS</button><div id="secinfo"></div></div>
   <div id="tracks"></div>
   <div id="song">
    <div class="srow"><span class="sl">PARTS</span><div class="chips" id="secs"></div></div>
@@ -106,6 +113,7 @@ input[type=range]{width:100%}
    <div class="ctl" id="slotctl"><button id="sL">◀</button><button id="sM">−</button><span id="sN">×2</span><button id="sP">+</button><button id="sR">▶</button><button id="sX">✕</button></div>
    <div class="ctl"><button id="bLoopM">Loop part</button><button id="bSongM">Play song</button></div>
   </div>
+  <div id="beats"></div>
  </div>
  <div id="pad">
   <button id="bRec" class="big"><span class="bl" id="lRec">REC</span><span class="bs" id="sRec"></span></button>
@@ -149,6 +157,7 @@ input[type=range]{width:100%}
  <div class="note">Name a sound and it starts recording: kick, snare, hats, open hat, clap, rim, tom, cowbell, bass, keys, lead (sing the notes) · full kit · teach kit · done · cancel · again · undo · play · stop · keep · overdub · double<br>
  Parts: new part · copy part · part B · next part · song · loop · add to song · twice · three times<br>
  Mixer: next track · track 2 · louder · quieter · mute · mute kick · solo snare · solo off · master louder · redo<br>
+ Beats: save beat · call it Night Drive · new beat · next beat · previous beat · open beat 3 · my beats<br>
  Other: tempo 92 · tap tempo · swing on · more sensitive · less sensitive · real sound · blend · synth · what · help</div>
  <div id="log"></div>
 </div>
@@ -163,7 +172,7 @@ const LETTERS='ABCDEFGH';
 const TEACH_N=6;
 const DEF={bpm:90,inst:'kick',secs:[{id:'A',len:0,layers:[]}],cur:0,song:[{s:'A',n:2}],mode:'loop',sel:-1,slot:0,view:'tracks',
   mute:{},quant:true,click:true,monitor:false,gate:true,lat:90,sens:3.5,swing:0,vol:0.9,kit:false,zones:{},nextId:1,
-  sound:'real',mic:'iphone',duplex:'full',ec:false,guide:true,car:false};
+  sound:'real',mic:'iphone',duplex:'full',ec:false,guide:true,car:false,beatId:null,beatName:null};
 const S=JSON.parse(JSON.stringify(DEF));
 try{
   const old=JSON.parse(localStorage.getItem('wheelbeat')||'{}');
@@ -178,6 +187,7 @@ const save=()=>{try{localStorage.setItem('wheelbeat',JSON.stringify(S))}catch(_)
 let ctx,master,duckG,setDet=()=>{},recog,wakeLock,alive=false,merge=null;
 let playing=false,t0=0,schedUntil=0,anchor=0,liveSlot=-1;
 let rec=null,tap=null,cal=null,teach=null,teachQ=[],askTempo=false;
+let BEATS=[];try{BEATS=JSON.parse(localStorage.getItem('wheelbeat_beats')||'[]')}catch(_){}
 let fut=[],hist=[],selfT=[],monT=[],recent=[],raw=[];
 let lastSaid='',lastSaidAt=0,lastSaidEnd=0,batch=null,urgent=false,talking=0;
 let mic=null; // {stream,src,label}
@@ -378,7 +388,7 @@ const DB={d:null,
   del(k){try{this.d&&this.st('readwrite').delete(k)}catch(_){}},
   all(){return new Promise(r=>{if(!this.d)return r([]);try{const s=this.st('readonly'),ks=s.getAllKeys(),vs=s.getAll();vs.onsuccess=()=>r(ks.result.map((k,i)=>[k,vs.result[i]]));vs.onerror=()=>r([])}catch(_){r([])}})}
 };
-function layerRefs(){const s=new Set();for(const l of allLayers())for(const h of l.hits)if(h.a)s.add(h.a);return s}
+function layerRefs(){const s=new Set();for(const l of allLayers().concat(BEATS.flatMap(b=>(b.secs||[]).flatMap(q=>q.layers))))for(const h of l.hits)if(h.a)s.add(h.a);return s}
 function persist(k){if(persisted.has(k))return;const sn=SN.get(k);if(!sn)return;DB.put(k,{sr:sn.buf.sampleRate,data:sn.buf.getChannelData(0).slice(),pk:sn.pk});persisted.add(k)}
 async function loadSnips(){
   await DB.open();const refs=layerRefs();let n=0;
@@ -437,7 +447,7 @@ async function start(){
   guideStart();
 }
 async function keepAwake(){try{if('wakeLock' in navigator)wakeLock=await navigator.wakeLock.request('screen')}catch(_){}}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&alive){keepAwake();ctx.resume().catch(()=>{})}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&alive&&S.beatId&&!rec)storeCurrent();if(document.visibilityState==='visible'&&alive){keepAwake();ctx.resume().catch(()=>{})}});
 
 /* ---------- mic ---------- */
 let iphoneId=null,micMuted=false;
@@ -512,6 +522,7 @@ function echoStrip(said){
 function command(raw){
   let said=raw.trim().toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
   said=echoStrip(said);
+  {const m=said.match(/^(?:call|name) (?:it|this|the beat|this beat) (.+)$/);if(m){urgent=true;try{renameBeat(m[1])}finally{urgent=false}return}}
   if(!said){log('(own voice) '+raw.trim());return}
   $('heard').textContent='heard: “'+said+'”';log('< '+said);
   let s=' '+said+' ';
@@ -525,7 +536,7 @@ function command(raw){
      .replace(/\b(real sounds?|my hits|real)\b/g,'realsound').replace(/\b(synth|synthetic|electronic)( sounds?)?\b/g,'synthsound').replace(/\bblend\b/g,'blendsound')
      .replace(/\bloop record\b/g,'overdub').replace(/\bover dub\b/g,'overdub').replace(/\bplay back\b/g,'play')
      .replace(/\b(play (the )?song|song mode|whole song)\b/g,'songmode').replace(/\b(loop (this |the )?(part|section)|loop it)\b/g,'loopmode')
-     .replace(/\b(new|add a|another) (part|section)\b/g,'newpart').replace(/\b(copy|duplicate|clone) (the |this )?(part|section)\b/g,'copypart')
+     .replace(/\b(new|another) (beat|song)\b|\bstart over\b/g,'newbeat').replace(/\bsave (the |this )?(beat|song|it)\b/g,'savebeat').replace(/\b(next|previous|last) (beat|song)\b/g,'$1beat').replace(/\b(open|load) (the )?(beat|song)\b/g,'openbeat').replace(/\b(list|my|what) (the )?beats\b/g,'listbeats').replace(/\b(new|add a|another) (part|section)\b/g,'newpart').replace(/\b(copy|duplicate|clone) (the |this )?(part|section)\b/g,'copypart')
      .replace(/\b(add (it |this )?to (the )?song|add (part|section))\b/g,'addsong').replace(/\b(delete|remove) (the |this )?(part|section)\b/g,'delpart')
      .replace(/\b(next|previous|last) (part|section)\b/g,'$1part').replace(/\b(part|section|go to)\b/g,'part')
      .replace(/\b(next|previous) track\b/g,'$1track')
@@ -549,7 +560,13 @@ function command(raw){
       else if(x==='record'||x==='rec'||x==='go')record(false);
       else if(x==='overdub'||x==='layer')record(true);
       else if(x==='again')again();
-      else if(x==='keep'||x==='capture'||x==='save')keep();
+      else if(x==='keep'||x==='capture')keep();
+      else if(x==='save'||x==='savebeat')saveBeat();
+      else if(x==='newbeat')newBeat();
+      else if(x==='nextbeat')cycleBeat(1);
+      else if(x==='previousbeat'||x==='lastbeat')cycleBeat(-1);
+      else if(x==='openbeat'){const n=num(i+1);if(n){i++;openBeatN(n)}else cycleBeat(1)}
+      else if(x==='listbeats')listBeats();
       else if(x==='play'||x==='start'||x==='listen')play();
       else if(x==='stop'||x==='pause')stop();
       else if(x==='done'||x==='finish'||x==='enough')done();
@@ -615,7 +632,7 @@ function command(raw){
 /* ---------- guide ---------- */
 const START_Q='What first? Kick, snare, hats, full kit, or bass to sing a bass line.';
 function guideStart(){
-  if(allLayers().length){say(`Welcome back. Part ${sec().id}. ${layerSummary()}. Say play, or name a sound to add.`);return}
+  if(allLayers().length){say(`Welcome back. ${S.beatName||'Your beat'}, part ${sec().id}. ${layerSummary()}. Say play, or name a sound to add.`);return}
   if(!S.guide){say(`Ready. ${LBL[S.inst]} selected. Press record.`);return}
   askTempo=true;
   say("Let's make a beat. Hit four times to set the tempo, or say skip.",{direct:true}).then(async()=>{if(askTempo&&await openMic())tap=[]});
@@ -696,6 +713,56 @@ function doublePart(){
   if(SL(s)*2>64){say('Sixteen bars is the most');return}
   snapshot();for(const l of s.layers)if(!l.len)l.len=SL(s);s.len=SL(s)*2;save();
   say(`Part ${s.id} is now ${bars(s.len)}. The tracks repeat, record something over the whole thing`);
+}
+
+/* ---------- saved beats ----------
+   Every beat lives in a library; the open one is written back whenever you save, switch, or start a new one. */
+const saveBeats=()=>{try{localStorage.setItem('wheelbeat_beats',JSON.stringify(BEATS))}catch(e){log('beats not saved: '+e.message);say('Storage is full. Delete an old beat')}};
+const BEAT_KEYS=['secs','song','bpm','swing','cur','nextId','mute'];
+function nextBeatName(){let m=0;for(const b of BEATS){const k=/^Beat (\d+)$/.exec(b.name);if(k)m=Math.max(m,+k[1])}return `Beat ${m+1}`}
+function storeCurrent(){
+  if(!allLayers().length)return null;
+  if(!S.beatId)S.beatId=Date.now().toString(36);
+  if(!S.beatName)S.beatName=nextBeatName();
+  let b=BEATS.find(x=>x.id===S.beatId);if(!b){b={id:S.beatId};BEATS.unshift(b)}
+  for(const k of BEAT_KEYS)b[k]=JSON.parse(JSON.stringify(S[k]));
+  b.name=S.beatName;b.at=Date.now();saveBeats();save();return b;
+}
+function saveBeat(){if(rec){say('Finish the take first');return}const b=storeCurrent();if(!b){say('Nothing to save yet');return}DRUM.good(ctx,master,now()+0.02);say(`Saved ${b.name}`)}
+function resetSong(){S.secs=JSON.parse(JSON.stringify(DEF.secs));S.song=JSON.parse(JSON.stringify(DEF.song));S.cur=0;S.slot=0;S.sel=-1;S.mode='loop';S.mute={};hist=[];fut=[];if(playing)restartClock()}
+function newBeat(){
+  if(rec||teach){say('Finish the take first');return}
+  const b=storeCurrent();resetSong();S.beatId=null;S.beatName=null;save();
+  say(`${b?'Saved '+b.name+'. ':''}New beat. ${S.guide?START_Q:'Press record.'}`);
+}
+function openBeat(id){
+  if(rec||teach){say('Finish the take first');return}
+  const b=BEATS.find(x=>x.id===id);if(!b)return;
+  if(S.beatId!==id)storeCurrent();
+  for(const k of BEAT_KEYS)if(b[k]!=null)S[k]=JSON.parse(JSON.stringify(b[k]));
+  S.beatId=b.id;S.beatName=b.name;S.mode='loop';S.sel=-1;S.slot=0;if(!S.secs[S.cur])S.cur=0;hist=[];fut=[];
+  if(playing)restartClock();save();
+  say(`${b.name}. Tempo ${S.bpm}. ${S.secs.length>1?S.secs.length+' parts. ':''}${layerSummary()}`);
+}
+function cycleBeat(d){
+  if(!BEATS.length){say('No saved beats yet. Say save beat');return}
+  const i=BEATS.findIndex(x=>x.id===S.beatId);
+  const j=i<0?(d>0?0:BEATS.length-1):i+d;
+  if(j<0||j>=BEATS.length){say(d>0?'That was the last beat':'That was the first beat');return}
+  openBeat(BEATS[j].id);
+}
+function openBeatN(n){const b=BEATS.find(x=>x.name.toLowerCase()==='beat '+n)||BEATS[n-1];if(!b){say(`There is no beat ${n}`);return}openBeat(b.id)}
+function listBeats(){say(BEATS.length?`${BEATS.length} beat${BEATS.length>1?'s':''}: ${BEATS.slice(0,6).map(b=>b.name).join(', ')}`:'No saved beats yet')}
+function renameBeat(name){
+  name=name.replace(/\b\w/g,c=>c.toUpperCase()).slice(0,40);S.beatName=name;save();
+  if(allLayers().length)storeCurrent();say(`Called it ${name}`);
+}
+function deleteBeat(id){
+  const b=BEATS.find(x=>x.id===id);if(!b)return;
+  if(!confirm(`Delete ${b.name}? This can't be undone.`))return;
+  BEATS=BEATS.filter(x=>x!==b);saveBeats();
+  if(S.beatId===id){S.beatId=null;S.beatName=null;save()}
+  say(`Deleted ${b.name}`);
 }
 
 /* ---------- mixer ---------- */
@@ -1141,7 +1208,7 @@ function render(n){
   setTxt('lPlay',playing?'STOP':'PLAY');$('bPlay').classList.toggle('on',playing);
   setTxt('lRec',rec||teach?'STOP':'REC');$('bRec').classList.toggle('on',!!rec);
   setTxt('sRec',rec||teach?'finish':S.kit&&!MELI.has(S.inst)?(zonesN()<2?'teach the kit':'full kit'):MELI.has(S.inst)?'sing '+LBL[S.inst]:LBL[S.inst]);
-  setTxt('sPlay',playing?(S.mode==='song'?'song':'part '+sec().id):`${S.mode==='song'?'song':'part '+sec().id} · ${S.bpm} bpm`);
+  setTxt('sPlay',`${S.beatName||S.bpm+' bpm'} · ${S.mode==='song'?'song':'part '+sec().id}`);
   const s=sec();
   setTxt('sUndo',rec||teach?'cancel':hist.length?(s.layers.length?s.layers[s.layers.length-1].name:''):'nothing');
   setTxt('sRedo',fut.length?'':'nothing');
@@ -1154,7 +1221,7 @@ function render(n){
 }
 
 /* panel: TRACKS = mixer rows with each track's pattern; SONG = parts and their order */
-let rowSig='',songSig='';
+let rowSig='',songSig='',beatSig='';
 function tapEl(el,fn){el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(!alive)return;DRUM.tap(ctx,master,now()+0.005);urgent=true;try{fn()}finally{urgent=false}})}
 function buildRows(s){
   const box=$('tracks');box.innerHTML='';
@@ -1188,10 +1255,11 @@ function drawLane(cv,items,L,pos,col,mel,live){
   if(pos!=null){g.fillStyle=live?'#f44':'#fff';g.fillRect(mod(pos,L)*xs,0,2,H)}
 }
 function renderPanel(n){
-  const s=sec(),view=S.view==='song'?'song':'tracks';
-  $('panel').classList.toggle('song',view==='song');
-  $('tTracks').classList.toggle('on',view==='tracks');$('tSong').classList.toggle('on',view==='song');
-  setTxt('secinfo',playing&&S.mode==='song'?`SONG ▸ ${s.id}`:`PART ${s.id} · ${s.len||rec&&rec.open?bars(SL(s)):'—'}`);
+  const s=sec(),view=['song','beats'].includes(S.view)?S.view:'tracks';
+  $('panel').classList.toggle('song',view==='song');$('panel').classList.toggle('beats',view==='beats');
+  $('tTracks').classList.toggle('on',view==='tracks');$('tSong').classList.toggle('on',view==='song');$('tBeats').classList.toggle('on',view==='beats');
+  setTxt('secinfo',view==='beats'?(S.beatName||'new beat'):playing&&S.mode==='song'?`SONG ▸ ${s.id}`:`PART ${s.id} · ${s.len||rec&&rec.open?bars(SL(s)):'—'}`);
+  if(view==='beats'){const sig=BEATS.map(b=>b.id+b.name+b.at).join(',')+'|'+S.beatId+allLayers().length;if(sig!==beatSig){beatSig=sig;buildBeats()}return}
   if(view==='tracks'){
     const sig=s.id+'|'+s.layers.map(l=>l.id).join(',')+'|'+(rec?'r':'');
     if(sig!==rowSig){rowSig=sig;buildRows(s)}
@@ -1233,6 +1301,24 @@ function drawGrid(n){
   if(!lanes.length){g.fillStyle='#555';g.font='14px -apple-system';g.fillText(`part ${s.id} · empty`,8,H/2+5)}
   if(pos!=null){g.fillStyle='#fff';g.fillRect(mod(pos,L)*xs,0,2,H)}
 }
+function buildBeats(){
+  const box=$('beats');box.innerHTML='';
+  const top=document.createElement('div');top.className='ctl';
+  const bs=document.createElement('button');bs.textContent='Save';tapEl(bs,saveBeat);
+  const bn=document.createElement('button');bn.textContent='+ New beat';tapEl(bn,newBeat);
+  top.append(bs,bn);box.appendChild(top);
+  if(!BEATS.length){const e=document.createElement('div');e.className='empty';e.textContent='No saved beats yet. Say "save beat", or "call it" and a name.';box.appendChild(e);return}
+  const ago=t=>{const m=(Date.now()-t)/60000;return m<60?Math.max(1,Math.round(m))+'m ago':m<1440?Math.round(m/60)+'h ago':new Date(t).toLocaleDateString()};
+  for(const b of BEATS){
+    const r=document.createElement('div');r.className='brow';
+    const o=document.createElement('button');o.className='bt'+(b.id===S.beatId?' cur':'');
+    const n=document.createElement('span');n.textContent=b.name;const sm=document.createElement('small');
+    sm.textContent=`${b.bpm} bpm · ${(b.secs||[]).length} part${(b.secs||[]).length>1?'s':''} · ${ago(b.at)}`;o.append(n,sm);
+    tapEl(o,()=>openBeat(b.id));
+    const x=document.createElement('button');x.className='bx';x.textContent='✕';x.onclick=e=>{e.stopPropagation();deleteBeat(b.id)};
+    r.append(o,x);box.appendChild(r);
+  }
+}
 function setTxt2(e,t){if(e&&e.textContent!==t)e.textContent=t}
 function chip(txt,cls,fn){const b=document.createElement('button');b.className='chip '+(cls||'');b.textContent=txt;tapEl(b,fn);return b}
 function buildSong(){
@@ -1259,6 +1345,7 @@ big('bPlay',()=>playing?stop():play());
 big('bUndo',undo);big('bRedo',redo);
 tapEl($('tTracks'),()=>{S.view='tracks';save()});
 tapEl($('tSong'),()=>{S.view='song';save()});
+tapEl($('tBeats'),()=>{S.view='beats';save()});
 tapEl($('sL'),()=>moveSlot(-1));tapEl($('sR'),()=>moveSlot(1));tapEl($('sX'),removeSlot);
 tapEl($('sM'),()=>{const sl=S.song[S.slot];if(sl&&sl.n>1){S.cur=Math.max(0,S.secs.findIndex(q=>q.id===sl.s));setReps(sl.n-1)}});
 tapEl($('sP'),()=>{const sl=S.song[S.slot];if(sl){S.cur=Math.max(0,S.secs.findIndex(q=>q.id===sl.s));setReps(sl.n+1)}});
